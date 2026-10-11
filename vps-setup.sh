@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Настройка VPS под туннели. В начале скрипт спрашивает, что ставить:
-#    1) Всё: VPN (TUIC v5) + fail2ban + Telegram MTProto
+#  VPS setup for tunnels. At start the script asks what to install:
+#    1) All: VPN (TUIC v5) + fail2ban + Telegram MTProto
 #    2) VPN (TUIC v5) + fail2ban
 #    3) Telegram MTProto + fail2ban
-#    4) Только fail2ban
+#    4) fail2ban only
 #
-#  Шаги:
-#    1. apt update && apt upgrade без диалогов
-#    2. установка curl
-#    3. TUIC v5 (встроенный установщик) + гостевые ссылки
-#    4. fail2ban (интерактивно)
-#    5. Telegram MTProto-прокси (mtg, FakeTLS)
+#  Steps:
+#    1. non-interactive apt update && apt upgrade
+#    2. install curl
+#    3. TUIC v5 (built-in installer) + guest links
+#    4. fail2ban (interactive)
+#    5. Telegram MTProto proxy (mtg, FakeTLS)
 #
-#  Запуск:  sudo bash vps-setup.sh [флаги]
-#  Флаги:   --mode all|vpn|mtproto|f2b   что ставить (без флага — меню)
-#           --skip-upgrade        не делать apt upgrade
-#           --name NAME           короткое имя сервера в ссылках: NAME_guest_N
-#           --guests N            сколько гостевых ссылок TUIC (по умолчанию 10)
-#           --tuic-version TAG    версия tuic-server (по умолчанию последняя)
-#           --tuic-binary PATH    свой бинарник tuic-server (без скачивания)
-#           --mtg-version TAG     версия mtg (по умолчанию последняя)
+#  Usage:   sudo bash vps-setup.sh [flags]
+#  Flags:   --mode all|vpn|mtproto|f2b   what to install (no flag = menu)
+#           --skip-upgrade        skip apt upgrade
+#           --name NAME           short server name in links: NAME_guest_N
+#           --guests N            number of TUIC guest links (default 10)
+#           --tuic-version TAG    tuic-server version (default: latest)
+#           --tuic-binary PATH    use own tuic-server binary (no download)
+#           --mtg-version TAG     mtg version (default: latest)
 #
-#  Бинарники берутся из релизов github.com/etjec4/tuic и github.com/9seconds/mtg.
-#  Источник TUIC можно сменить переменной TUIC_REPO=owner/repo.
+#  Binaries come from releases of github.com/etjec4/tuic and github.com/9seconds/mtg.
+#  TUIC source can be changed with TUIC_REPO=owner/repo.
 # =============================================================================
 set -Eeuo pipefail
 
@@ -54,20 +54,20 @@ MODE=""
 SKIP_UPGRADE=0
 while (( $# )); do
   case "$1" in
-    --mode)         MODE="${2:?нужно значение}"; shift ;;
+    --mode)         MODE="${2:?value required}"; shift ;;
     --skip-upgrade) SKIP_UPGRADE=1 ;;
-    --name)         SERVER_NAME="${2:?нужно значение}"; shift ;;
-    --guests)       GUESTS="${2:?нужно значение}"; shift ;;
-    --tuic-version) TUIC_VERSION="${2:?нужно значение}"; shift ;;
-    --tuic-binary)  TUIC_BINARY="${2:?нужно значение}"; shift ;;
-    --mtg-version)  MTG_VERSION="${2:?нужно значение}"; shift ;;
+    --name)         SERVER_NAME="${2:?value required}"; shift ;;
+    --guests)       GUESTS="${2:?value required}"; shift ;;
+    --tuic-version) TUIC_VERSION="${2:?value required}"; shift ;;
+    --tuic-binary)  TUIC_BINARY="${2:?value required}"; shift ;;
+    --mtg-version)  MTG_VERSION="${2:?value required}"; shift ;;
     -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
-    *) echo "Неизвестный аргумент: $1"; exit 1 ;;
+    *) echo "Unknown argument: $1"; exit 1 ;;
   esac
   shift
 done
 
-[[ "$GUESTS" =~ ^[0-9]+$ ]] && (( GUESTS >= 1 )) || { echo "--guests: нужно число >= 1"; exit 1; }
+[[ "$GUESTS" =~ ^[0-9]+$ ]] && (( GUESTS >= 1 )) || { echo "--guests: number >= 1 required"; exit 1; }
 [[ -z "$MODE" || "$MODE" =~ ^(all|vpn|mtproto|f2b)$ ]] || { echo "--mode: all | vpn | mtproto | f2b"; exit 1; }
 
 # ---------- вывод ----------
@@ -76,7 +76,7 @@ step() { echo -e "\n${c_blue}==> $*${c_off}"; }
 ok()   { echo -e "${c_green}[ok]${c_off} $*"; }
 warn() { echo -e "${c_yellow}[!]${c_off} $*"; }
 die()  { echo -e "${c_red}[x]${c_off} $*" >&2; exit 1; }
-trap 'die "Ошибка в строке $LINENO: $BASH_COMMAND"' ERR
+trap 'die "Error at line $LINENO: $BASH_COMMAND"' ERR
 
 # ---------- ввод (читаем из терминала, даже если stdin занят) ----------
 ask() {  # ask "Вопрос" "дефолт" -> echo ответ
@@ -125,27 +125,27 @@ latest_tag() {
 }
 
 # ---------- проверки ----------
-[[ $EUID -eq 0 ]] || die "Запусти от root: sudo bash $0"
-command -v apt-get >/dev/null || die "Нужен Debian/Ubuntu (apt)."
-[[ -t 0 || -e /dev/tty ]] || die "Нужен интерактивный терминал."
+[[ $EUID -eq 0 ]] || die "Run as root: sudo bash $0"
+command -v apt-get >/dev/null || die "Debian/Ubuntu (apt) required."
+[[ -t 0 || -e /dev/tty ]] || die "Interactive terminal required."
 
 # =============================================================================
 # 0. Что ставим
 # =============================================================================
 if [[ -z "$MODE" ]]; then
   echo
-  echo "Что установить и настроить?"
-  echo "  1) Всё: VPN (TUIC) + fail2ban + Telegram MTProto"
+  echo "What to install?"
+  echo "  1) All: VPN (TUIC) + fail2ban + Telegram MTProto"
   echo "  2) VPN (TUIC) + fail2ban"
   echo "  3) Telegram MTProto + fail2ban"
-  echo "  4) Только fail2ban"
+  echo "  4) fail2ban only"
   while :; do
-    case "$(ask "Выбор" "1")" in
+    case "$(ask "Choice" "1")" in
       1) MODE=all ;;
       2) MODE=vpn ;;
       3) MODE=mtproto ;;
       4) MODE=f2b ;;
-      *) warn "Введи число от 1 до 4"; continue ;;
+      *) warn "Enter a number from 1 to 4"; continue ;;
     esac
     break
   done
@@ -161,7 +161,7 @@ esac
 plan="fail2ban"
 (( DO_TUIC )) && plan="VPN (TUIC) + $plan"
 (( DO_MTG ))  && plan="$plan + Telegram MTProto"
-ok "Ставлю: $plan"
+ok "Installing: $plan"
 
 # =============================================================================
 # 1. Обновление системы без диалогов
@@ -170,20 +170,20 @@ export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a          # Ubuntu 22.04+: не спрашивать про перезапуск сервисов
 APT_OPTS=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 
-step "Обновляю список пакетов"
+step "Updating package lists"
 apt-get update -q
 
 if (( ! SKIP_UPGRADE )); then
-  step "Обновляю систему (apt upgrade)"
+  step "Upgrading system (apt upgrade)"
   apt-get "${APT_OPTS[@]}" upgrade
   apt-get "${APT_OPTS[@]}" autoremove
-  ok "Система обновлена"
+  ok "System upgraded"
 fi
 
 # =============================================================================
 # 2. curl (+ jq, openssl, tar — нужны TUIC и mtg)
 # =============================================================================
-step "Ставлю curl, jq, openssl"
+step "Installing curl, jq, openssl"
 apt-get "${APT_OPTS[@]}" install curl jq openssl tar ca-certificates
 ok "curl $(curl --version | head -1 | awk '{print $2}')"
 
@@ -196,13 +196,13 @@ tuic_arch() {
     i686)    echo "i686-unknown-linux-gnu" ;;
     armv7l)  echo "armv7-unknown-linux-gnueabi" ;;
     aarch64) echo "aarch64-unknown-linux-gnu" ;;
-    *) die "Архитектура $(uname -m) не поддерживается TUIC" ;;
+    *) die "Architecture $(uname -m) is not supported by TUIC" ;;
   esac
 }
 
 tuic_uninstall() {
   systemctl disable --now tuic >/dev/null 2>&1 || true
-  pkill -f tuic-server 2>/dev/null || true
+  pkill -x tuic-server 2>/dev/null || true   # -x: точное имя процесса, не задевает сам скрипт
   rm -f "$TUIC_SERVICE"
   rm -rf "$TUIC_DIR"
   systemctl daemon-reload
@@ -211,31 +211,31 @@ tuic_uninstall() {
 tuic_get_binary() {  # кладёт бинарник в $TUIC_DIR/tuic-server
   local dst="$TUIC_DIR/tuic-server"
   if [[ -n "$TUIC_BINARY" ]]; then
-    [[ -f "$TUIC_BINARY" ]] || die "Файл $TUIC_BINARY не найден"
+    [[ -f "$TUIC_BINARY" ]] || die "File $TUIC_BINARY not found"
     install -m 755 "$TUIC_BINARY" "$dst"
-    ok "Использую свой бинарник: $TUIC_BINARY"
+    ok "Using own binary: $TUIC_BINARY"
     return
   fi
   if [[ -z "$TUIC_VERSION" ]]; then
     TUIC_VERSION="$(latest_tag "$TUIC_REPO")" || true
-    [[ -n "$TUIC_VERSION" ]] || die "Не удалось узнать версию TUIC (лимит GitHub API?). Укажи --tuic-version TAG"
+    [[ -n "$TUIC_VERSION" ]] || die "Could not get TUIC version (GitHub API limit?). Use --tuic-version TAG"
   fi
   local url="https://github.com/$TUIC_REPO/releases/download/$TUIC_VERSION/$TUIC_VERSION-$(tuic_arch)"
-  echo "Скачиваю $url"
-  curl -fL --retry 3 -o "$dst.tmp" "$url" || die "Не удалось скачать tuic-server"
-  is_elf "$dst.tmp" || { rm -f "$dst.tmp"; die "Скачанный файл не похож на бинарник"; }
+  echo "Downloading $url"
+  curl -fL --retry 3 -o "$dst.tmp" "$url" || die "Failed to download tuic-server"
+  is_elf "$dst.tmp" || { rm -f "$dst.tmp"; die "Downloaded file is not a binary"; }
   mv "$dst.tmp" "$dst"; chmod 755 "$dst"
   ok "tuic-server $TUIC_VERSION"
 }
 
 tuic_install() {
   if [[ -d "$TUIC_DIR" ]]; then
-    echo "TUIC уже установлен в $TUIC_DIR."
-    echo "  1) Переустановить   2) Оставить как есть   3) Удалить"
-    case "$(ask "Выбор" "2")" in
+    echo "TUIC is already installed in $TUIC_DIR."
+    echo "  1) Reinstall   2) Keep as is   3) Remove"
+    case "$(ask "Choice" "2")" in
       1) tuic_uninstall ;;
-      3) tuic_uninstall; ok "TUIC удалён"; return ;;
-      *) ok "Оставляю текущую установку"; return ;;
+      3) tuic_uninstall; ok "TUIC removed"; return ;;
+      *) ok "Keeping current installation"; return ;;
     esac
   fi
 
@@ -245,9 +245,9 @@ tuic_install() {
   # Порт
   local port
   while :; do
-    port="$(ask "Порт TUIC (UDP)" "$(shuf -i 10000-65000 -n 1)")"
-    is_port "$port" || { warn "Некорректный порт"; continue; }
-    udp_busy "$port" && { warn "UDP-порт $port уже занят"; continue; }
+    port="$(ask "TUIC port (UDP)" "$(shuf -i 10000-65000 -n 1)")"
+    is_port "$port" || { warn "Invalid port"; continue; }
+    udp_busy "$port" && { warn "UDP port $port is already in use"; continue; }
     break
   done
 
@@ -257,18 +257,18 @@ tuic_install() {
   def_name="$(hostname -s | tr -cd 'A-Za-z0-9._-' | cut -c1-12)"
   def_name="${def_name:-vps}"
   while :; do
-    [[ -z "$server_name" ]] && server_name="$(ask "Короткое имя сервера для ссылок (до 20 символов)" "$def_name")"
+    [[ -z "$server_name" ]] && server_name="$(ask "Short server name for links (up to 20 chars)" "$def_name")"
     server_name="${server_name// /_}"
     if [[ ! "$server_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
-      warn "Допустимы только латиница, цифры и . _ -"
+      warn "Only latin letters, digits and . _ - are allowed"
     elif (( ${#server_name} > 20 )); then
-      warn "Слишком длинное: ${#server_name} символов, максимум 20"
+      warn "Too long: ${#server_name} chars, max 20"
     else
       break
     fi
     server_name=""
   done
-  ok "Имя в ссылках: ${server_name}_guest_N"
+  ok "Link name: ${server_name}_guest_N"
 
   # Гостевые пользователи: случайные UUID и пароли
   local users_json="{}" i
@@ -278,10 +278,10 @@ tuic_install() {
     g_pass[i]="$(openssl rand -hex 12)"
     users_json="$(jq -c --arg u "${g_uuid[i]}" --arg p "${g_pass[i]}" '. + {($u): $p}' <<<"$users_json")"
   done
-  ok "Сгенерировано гостевых пользователей: $GUESTS"
+  ok "Guest users generated: $GUESTS"
 
   # Самоподписанный сертификат
-  local cn; cn="$(ask "CN сертификата" "bing.com")"
+  local cn; cn="$(ask "Certificate CN" "bing.com")"
   openssl ecparam -genkey -name prime256v1 -out "$TUIC_DIR/ca.key" 2>/dev/null
   openssl req -new -x509 -days 36500 -key "$TUIC_DIR/ca.key" -out "$TUIC_DIR/ca.crt" -subj "/CN=$cn" 2>/dev/null
   chmod 600 "$TUIC_DIR/ca.key"
@@ -331,9 +331,9 @@ EOF
   systemctl enable --now tuic >/dev/null 2>&1
   sleep 2
   if systemctl is-active --quiet tuic; then
-    ok "Сервис tuic запущен"
+    ok "tuic service is running"
   else
-    warn "Сервис tuic не стартовал: journalctl -u tuic -n 50"
+    warn "tuic service failed to start: journalctl -u tuic -n 50"
   fi
 
   # Ссылки для клиентов — сохраняем в файл, выводим в самом конце установки
@@ -346,7 +346,7 @@ EOF
 }
 
 if (( DO_TUIC )); then
-  step "Устанавливаю TUIC v5"
+  step "Installing TUIC v5"
   tuic_install
 fi
 
@@ -365,7 +365,7 @@ MTG_PORT="$(mtg_config_port)"
 # =============================================================================
 # 4. fail2ban
 # =============================================================================
-step "Устанавливаю fail2ban"
+step "Installing fail2ban"
 
 # Где лежат логи SSH: если нет auth.log (Debian 12+) — читаем journald
 if [[ -f /var/log/auth.log ]]; then
@@ -390,28 +390,28 @@ SSH_PORT_DETECTED="${SSH_PORT_DETECTED:-22}"
 
 echo
 echo "------------------------------------------------------------"
-echo " Настройка fail2ban"
-echo " Баны применяются ТОЛЬКО к защищаемым портам (SSH)."
-echo " Порты из списка исключений fail2ban не трогает никогда."
+echo " fail2ban setup"
+echo " Bans apply ONLY to protected ports (SSH)."
+echo " Ports from the exclusion list are never touched by fail2ban."
 echo "------------------------------------------------------------"
 
 while :; do
-  SSH_PORTS="$(normalize_ports "$(ask "Порт(ы) SSH для защиты" "$SSH_PORT_DETECTED")")"
-  [[ "$SSH_PORTS" == BAD:* ]] && { warn "Некорректный порт: ${SSH_PORTS#BAD:}"; continue; }
+  SSH_PORTS="$(normalize_ports "$(ask "SSH port(s) to protect" "$SSH_PORT_DETECTED")")"
+  [[ "$SSH_PORTS" == BAD:* ]] && { warn "Invalid port: ${SSH_PORTS#BAD:}"; continue; }
   [[ -n "$SSH_PORTS" ]] && break
-  warn "Нужен хотя бы один порт."
+  warn "At least one port is required."
 done
 
 # --- порты-исключения ---
 EXCL_DEFAULT="$(echo "$TUIC_PORT $MTG_PORT" | xargs | tr ' ' ',')"
-[[ -n "$TUIC_PORT" ]] && echo "Найден порт TUIC: $TUIC_PORT"
-[[ -n "$MTG_PORT" ]]  && echo "Найден порт MTProto: $MTG_PORT"
-(( DO_MTG )) && echo "Порт MTProto, который будет выбран дальше, добавится в исключения автоматически."
+[[ -n "$TUIC_PORT" ]] && echo "Found TUIC port: $TUIC_PORT"
+[[ -n "$MTG_PORT" ]]  && echo "Found MTProto port: $MTG_PORT"
+(( DO_MTG )) && echo "The MTProto port chosen later will be added to exclusions automatically."
 while :; do
-  EXCLUDED="$(ask "Порты, которые fail2ban трогать НЕ должен (через запятую, Enter — пропустить)" "$EXCL_DEFAULT")"
+  EXCLUDED="$(ask "Ports fail2ban must NOT touch (comma-separated, Enter to skip)" "$EXCL_DEFAULT")"
   if [[ -z "$EXCLUDED" ]]; then break; fi
   EXCLUDED="$(normalize_ports "$EXCLUDED")"
-  [[ "$EXCLUDED" == BAD:* ]] && { warn "Некорректный порт: ${EXCLUDED#BAD:}"; continue; }
+  [[ "$EXCLUDED" == BAD:* ]] && { warn "Invalid port: ${EXCLUDED#BAD:}"; continue; }
   break
 done
 
@@ -422,37 +422,37 @@ if [[ -n "$EXCLUDED" ]]; then
   IFS=, read -ra _ex  <<<"$EXCLUDED"
   for s in "${_ssh[@]}"; do for e in "${_ex[@]}"; do [[ "$s" == "$e" ]] && conflict+="$s "; done; done
   if [[ -n "$conflict" ]]; then
-    warn "Порт(ы) ${conflict}есть в обоих списках — убираю их из защиты."
+    warn "Port(s) ${conflict}are in both lists — removing them from protection."
     filtered=()
     for s in "${_ssh[@]}"; do [[ " $conflict " == *" $s "* ]] || filtered+=("$s"); done
     SSH_PORTS="$(IFS=,; echo "${filtered[*]}")"
-    [[ -n "$SSH_PORTS" ]] || die "Не осталось портов для защиты — fail2ban настраивать нечего."
+    [[ -n "$SSH_PORTS" ]] || die "No ports left to protect — nothing to configure for fail2ban."
   fi
 fi
 
 # --- параметры банов ---
-while :; do MAXRETRY="$(ask "Неудачных попыток до бана" "5")"; [[ "$MAXRETRY" =~ ^[0-9]+$ ]] && break; warn "Нужно число"; done
-FINDTIME="$(ask "Окно подсчёта попыток (напр. 10m, 1h)" "10m")"
-BANTIME="$(ask "Длительность бана (напр. 1h, 1d, -1 = навсегда)" "1h")"
+while :; do MAXRETRY="$(ask "Failed attempts before ban" "5")"; [[ "$MAXRETRY" =~ ^[0-9]+$ ]] && break; warn "Number required"; done
+FINDTIME="$(ask "Attempt counting window (e.g. 10m, 1h)" "10m")"
+BANTIME="$(ask "Ban duration (e.g. 1h, 1d, -1 = forever)" "1h")"
 
 INCREMENT="false"
-if [[ "$BANTIME" != "-1" ]] && ask_yn "Увеличивать бан для повторных нарушителей?" y; then
+if [[ "$BANTIME" != "-1" ]] && ask_yn "Increase ban time for repeat offenders?" y; then
   INCREMENT="true"
 fi
 
 # --- белый список IP ---
 MY_IP="$(echo "${SSH_CLIENT:-}" | awk '{print $1}')"
-echo "IP, которые никогда не банятся (через пробел). Свой IP лучше добавить."
-[[ -n "$MY_IP" ]] && echo "Твой текущий IP: $MY_IP"
-WHITELIST="$(ask "Белый список IP/подсетей" "${MY_IP}")"
+echo "IPs that are never banned (space-separated). Better add your own IP."
+[[ -n "$MY_IP" ]] && echo "Your current IP: $MY_IP"
+WHITELIST="$(ask "IP/subnet whitelist" "${MY_IP}")"
 IGNOREIP="127.0.0.1/8 ::1 ${WHITELIST//,/ }"
 
 # --- конфиг ---
 [[ -f "$JAIL_FILE" ]] && cp "$JAIL_FILE" "${JAIL_FILE}.bak.$(date +%s)"
 
 cat > "$JAIL_FILE" <<EOF
-# Сгенерировано vps-setup.sh $(date '+%F %T')
-# Порты-исключения (fail2ban их не блокирует): ${EXCLUDED:-нет}
+# Generated by vps-setup.sh $(date '+%F %T')
+# Excluded ports (not blocked by fail2ban): ${EXCLUDED:-none}
 
 [DEFAULT]
 ignoreip  = ${IGNOREIP}
@@ -460,7 +460,7 @@ bantime   = ${BANTIME}
 findtime  = ${FINDTIME}
 maxretry  = ${MAXRETRY}
 backend   = ${F2B_BACKEND}
-# multiport: бан действует только на порты конкретного jail, а не на весь сервер
+# multiport: ban applies only to this jail's ports, not the whole server
 banaction = ${F2B_BANACTION}
 bantime.increment = ${INCREMENT}
 bantime.maxtime   = 1w
@@ -474,15 +474,15 @@ EOF
 # Отключаем дефолтный debian-конфиг, если он банит по всем портам
 if [[ -f /etc/fail2ban/jail.d/defaults-debian.conf ]] && grep -q 'allports' /etc/fail2ban/jail.d/defaults-debian.conf; then
   mv /etc/fail2ban/jail.d/defaults-debian.conf /etc/fail2ban/jail.d/defaults-debian.conf.disabled
-  warn "defaults-debian.conf отключён (там был бан по всем портам)."
+  warn "defaults-debian.conf disabled (it banned all ports)."
 fi
 
-step "Проверяю конфиг и запускаю fail2ban"
-fail2ban-client -t >/dev/null || die "Конфиг fail2ban некорректен: fail2ban-client -t"
+step "Checking config and starting fail2ban"
+fail2ban-client -t >/dev/null || die "fail2ban config is invalid: fail2ban-client -t"
 systemctl enable fail2ban >/dev/null 2>&1
 systemctl restart fail2ban
 sleep 2
-fail2ban-client status sshd || warn "Jail sshd не поднялся: journalctl -u fail2ban -n 50"
+fail2ban-client status sshd || warn "sshd jail failed to start: journalctl -u fail2ban -n 50"
 
 # =============================================================================
 # 5. Telegram MTProto-прокси (mtg, режим FakeTLS)
@@ -494,7 +494,7 @@ mtg_arch() {
     armv7l)      echo "armv7" ;;
     armv6l)      echo "armv6" ;;
     i686|i386)   echo "386" ;;
-    *) die "Архитектура $(uname -m) не поддерживается mtg" ;;
+    *) die "Architecture $(uname -m) is not supported by mtg" ;;
   esac
 }
 
@@ -509,16 +509,16 @@ mtg_uninstall() {
 mtg_get_binary() {
   if [[ -z "$MTG_VERSION" ]]; then
     MTG_VERSION="$(latest_tag "$MTG_REPO")" || true
-    [[ -n "$MTG_VERSION" ]] || die "Не удалось узнать версию mtg (лимит GitHub API?). Укажи --mtg-version TAG"
+    [[ -n "$MTG_VERSION" ]] || die "Could not get mtg version (GitHub API limit?). Use --mtg-version TAG"
   fi
   local ver="${MTG_VERSION#v}" tmp bin
   local url="https://github.com/$MTG_REPO/releases/download/v$ver/mtg-$ver-linux-$(mtg_arch).tar.gz"
   tmp="$(mktemp -d)"
-  echo "Скачиваю $url"
-  curl -fL --retry 3 -o "$tmp/mtg.tar.gz" "$url" || { rm -rf "$tmp"; die "Не удалось скачать mtg"; }
-  tar -xzf "$tmp/mtg.tar.gz" -C "$tmp" || { rm -rf "$tmp"; die "Не удалось распаковать архив mtg"; }
+  echo "Downloading $url"
+  curl -fL --retry 3 -o "$tmp/mtg.tar.gz" "$url" || { rm -rf "$tmp"; die "Failed to download mtg"; }
+  tar -xzf "$tmp/mtg.tar.gz" -C "$tmp" || { rm -rf "$tmp"; die "Failed to extract mtg archive"; }
   bin="$(find "$tmp" -type f -name mtg -print -quit)"
-  [[ -n "$bin" ]] && is_elf "$bin" || { rm -rf "$tmp"; die "В архиве нет бинарника mtg"; }
+  [[ -n "$bin" ]] && is_elf "$bin" || { rm -rf "$tmp"; die "No mtg binary in archive"; }
   install -m 755 "$bin" "$MTG_BIN"
   rm -rf "$tmp"
   ok "mtg $ver"
@@ -526,12 +526,12 @@ mtg_get_binary() {
 
 mtg_install() {
   if [[ -f "$MTG_CONFIG" ]]; then
-    echo "MTProto-прокси уже установлен ($MTG_CONFIG)."
-    echo "  1) Переустановить   2) Оставить как есть   3) Удалить"
-    case "$(ask "Выбор" "2")" in
+    echo "MTProto proxy is already installed ($MTG_CONFIG)."
+    echo "  1) Reinstall   2) Keep as is   3) Remove"
+    case "$(ask "Choice" "2")" in
       1) mtg_uninstall ;;
-      3) mtg_uninstall; ok "MTProto-прокси удалён"; return ;;
-      *) ok "Оставляю текущую установку"; return ;;
+      3) mtg_uninstall; ok "MTProto proxy removed"; return ;;
+      *) ok "Keeping current installation"; return ;;
     esac
   fi
 
@@ -544,31 +544,31 @@ mtg_install() {
   local port def_port=443
   if tcp_busy 443; then
     def_port="$(shuf -i 10000-65000 -n 1)"
-    warn "TCP 443 занят — предлагаю случайный порт"
+    warn "TCP 443 is in use — suggesting a random port"
   fi
   while :; do
-    port="$(ask "Порт MTProto (TCP)" "$def_port")"
-    is_port "$port" || { warn "Некорректный порт"; continue; }
-    tcp_busy "$port" && { warn "TCP-порт $port уже занят"; continue; }
-    [[ ",$SSH_PORTS," == *",$port,"* ]] && { warn "Это порт SSH"; continue; }
+    port="$(ask "MTProto port (TCP)" "$def_port")"
+    is_port "$port" || { warn "Invalid port"; continue; }
+    tcp_busy "$port" && { warn "TCP port $port is already in use"; continue; }
+    [[ ",$SSH_PORTS," == *",$port,"* ]] && { warn "This is the SSH port"; continue; }
     break
   done
 
   # Домен для маскировки FakeTLS: трафик выглядит как HTTPS к этому сайту
   local domain
   while :; do
-    domain="$(ask "Домен для маскировки FakeTLS" "www.google.com")"
+    domain="$(ask "FakeTLS camouflage domain" "www.google.com")"
     [[ "$domain" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] && break
-    warn "Нужно доменное имя, например www.google.com"
+    warn "A domain name is required, e.g. www.google.com"
   done
 
   local secret
   secret="$("$MTG_BIN" generate-secret --hex "$domain")"
-  [[ "$secret" == ee* ]] || die "Не удалось сгенерировать секрет mtg"
+  [[ "$secret" == ee* ]] || die "Failed to generate mtg secret"
 
   mkdir -p "$MTG_DIR"
   cat > "$MTG_CONFIG" <<EOF
-# Сгенерировано vps-setup.sh $(date '+%F %T')
+# Generated by vps-setup.sh $(date '+%F %T')
 secret    = "$secret"
 bind-to   = "0.0.0.0:$port"
 prefer-ip = "prefer-ipv4"
@@ -600,9 +600,9 @@ EOF
   systemctl enable --now mtg >/dev/null 2>&1
   sleep 2
   if systemctl is-active --quiet mtg; then
-    ok "Сервис mtg запущен"
+    ok "mtg service is running"
   else
-    warn "Сервис mtg не стартовал: journalctl -u mtg -n 50"
+    warn "mtg service failed to start: journalctl -u mtg -n 50"
   fi
 
   # Ссылки: t.me (открывается откуда угодно) и tg:// (сразу в приложении)
@@ -613,13 +613,13 @@ EOF
 }
 
 if (( DO_MTG )); then
-  step "Устанавливаю Telegram MTProto-прокси"
+  step "Installing Telegram MTProto proxy"
   mtg_install
 
   # Добавляем порт MTProto в список исключений fail2ban
   if [[ -n "$MTG_PORT" && ",$EXCLUDED," != *",$MTG_PORT,"* ]]; then
     EXCLUDED="${EXCLUDED:+$EXCLUDED,}$MTG_PORT"
-    sed -i "s|^# Порты-исключения.*|# Порты-исключения (fail2ban их не блокирует): $EXCLUDED|" "$JAIL_FILE"
+    sed -i "s|^# Excluded ports.*|# Excluded ports (not blocked by fail2ban): $EXCLUDED|" "$JAIL_FILE"
   fi
 fi
 
@@ -627,34 +627,34 @@ fi
 # Итог
 # =============================================================================
 echo
-echo -e "${c_green}================= Готово =================${c_off}"
+echo -e "${c_green}================= Done =================${c_off}"
 if (( DO_TUIC )) && [[ -n "$TUIC_PORT" ]]; then
-  echo " TUIC:         порт $TUIC_PORT/udp, конфиг $TUIC_CONFIG"
-  [[ -s "$TUIC_LINKS" ]] && echo "               ссылки: $TUIC_LINKS"
+  echo " TUIC:         port $TUIC_PORT/udp, config $TUIC_CONFIG"
+  [[ -s "$TUIC_LINKS" ]] && echo "               links: $TUIC_LINKS"
 fi
 if (( DO_MTG )) && [[ -n "$MTG_PORT" ]]; then
-  echo " MTProto:      порт $MTG_PORT/tcp, конфиг $MTG_CONFIG"
-  [[ -s "$MTG_LINKS" ]] && echo "               ссылки: $MTG_LINKS"
+  echo " MTProto:      port $MTG_PORT/tcp, config $MTG_CONFIG"
+  [[ -s "$MTG_LINKS" ]] && echo "               links: $MTG_LINKS"
 fi
-echo " fail2ban:     защищает SSH на ${SSH_PORTS}/tcp"
-echo " Исключения:   ${EXCLUDED:-нет}"
-echo " Бан:          ${MAXRETRY} попыток за ${FINDTIME} -> ${BANTIME} (рост: ${INCREMENT})"
-echo " Белый список: ${IGNOREIP}"
-echo " Конфиг:       $JAIL_FILE"
+echo " fail2ban:     protects SSH on ${SSH_PORTS}/tcp"
+echo " Excluded:     ${EXCLUDED:-none}"
+echo " Ban:          ${MAXRETRY} attempts in ${FINDTIME} -> ${BANTIME} (increment: ${INCREMENT})"
+echo " Whitelist:    ${IGNOREIP}"
+echo " Config:       $JAIL_FILE"
 echo
-echo " Полезное:"
-echo "   fail2ban-client status sshd           # кто забанен"
-echo "   fail2ban-client set sshd unbanip IP   # разбанить"
-(( DO_MTG )) && echo "   mtg access $MTG_CONFIG     # ссылки MTProto ещё раз"
+echo " Useful:"
+echo "   fail2ban-client status sshd           # who is banned"
+echo "   fail2ban-client set sshd unbanip IP   # unban"
+(( DO_MTG )) && echo "   mtg access $MTG_CONFIG     # show MTProto links again"
 if [[ -f /var/run/reboot-required ]]; then
   echo
-  warn "После обновления нужна перезагрузка: reboot"
+  warn "Reboot required after upgrade: reboot"
 fi
 
 # Ссылки для клиентов — последним блоком, чтобы было удобно копировать
 if (( DO_TUIC )) && [[ -s "$TUIC_LINKS" ]]; then
   echo
-  echo -e "${c_green}============ Ссылки TUIC ============${c_off}"
+  echo -e "${c_green}============ TUIC links ============${c_off}"
   echo
   sed 'G' "$TUIC_LINKS"
 fi
